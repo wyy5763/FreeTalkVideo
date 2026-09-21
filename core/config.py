@@ -23,6 +23,7 @@ class Settings:
     tts_model: str = os.getenv("TTS_MODEL", "cosyvoice3")
     tts_voice: str = os.getenv("TTS_VOICE", "default")
     cosyvoice_root: str = os.getenv("COSYVOICE_ROOT", "")
+    cosyvoice_python: str = os.getenv("COSYVOICE_PYTHON", "python")
     cosyvoice_model_dir: str = os.getenv("COSYVOICE_MODEL_DIR", "")
     cosyvoice_prompt_wav: str = os.getenv("COSYVOICE_PROMPT_WAV", "")
     cosyvoice_prompt_text: str = os.getenv("COSYVOICE_PROMPT_TEXT", "")
