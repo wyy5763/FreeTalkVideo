@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+outputs/*
+!outputs/.gitkeep
+models/
+weights/
+checkpoints/
+*.mp4
+*.wav
+*.srt
+*.png
+*.jpg
