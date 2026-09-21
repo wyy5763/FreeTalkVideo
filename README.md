@@ -114,7 +114,7 @@ COSYVOICE_FP16=true
 
 native 模式使用 CosyVoice3 的 `AutoModel(...).inference_zero_shot(...)`，生成 WAV 后交给 MuseTalk。
 
-注意：CosyVoice 本身的 PyTorch / CUDA / 模型依赖建议安装在 CosyVoice 自己的环境中，然后把 `COSYVOICE_ROOT` 指向该 checkout，并让 `MUSETALK_PYTHON` 使用 MuseTalk 环境。这样可以避免把两个大型模型环境强行混在一起。
+注意：CosyVoice 本身的 PyTorch / CUDA / 模型依赖可以安装在独立环境中。将 `COSYVOICE_ROOT` 指向 CosyVoice checkout，并将 `COSYVOICE_PYTHON` 指向 CosyVoice 环境的 Python；FreeTalkVideo 会通过独立 worker 进程调用 CosyVoice3，因此不要求把 CosyVoice 和主程序依赖强行装进同一个环境。MuseTalk 同样可以通过 `MUSETALK_PYTHON` 使用独立环境。
 
 ## 3. MuseTalk 1.5
 
