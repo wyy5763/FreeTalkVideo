@@ -11,7 +11,8 @@ class PipelineError(RuntimeError):
     pass
 
 def create_video(topic: str, avatar: str, style: str, seconds: int,
-                 speed: float, use_musetalk: bool, add_srt: bool):
+                 speed: float, use_musetalk: bool, add_srt: bool,
+                 voice: str = "", reference_audio: str = ""):
     if not topic.strip():
         raise PipelineError("请输入主题或口播稿")
 
@@ -28,7 +29,14 @@ def create_video(topic: str, avatar: str, style: str, seconds: int,
         script = generate_script(topic.strip(), style, seconds)
 
     (job / "script.txt").write_text(script, encoding="utf-8")
-    audio = synthesize(script, job / "speech.wav", speed=speed)
+
+    # 原生CosyVoice3的提示音由环境变量配置；API模式使用voice字段。
+    audio = synthesize(
+        script,
+        job / "speech.wav",
+        voice=voice.strip() or None,
+        speed=speed,
+    )
 
     if use_musetalk:
         try:
@@ -36,7 +44,7 @@ def create_video(topic: str, avatar: str, style: str, seconds: int,
         except LipSyncError as exc:
             raise PipelineError(
                 f"MuseTalk模式失败：{exc}\n\n"
-                "取消“使用MuseTalk”可以先验证LLM→TTS→FFmpeg全流程。"
+                "请先运行 python app.py 的“系统检查”，确认MuseTalk模型和Whisper目录已配置。"
             ) from exc
     else:
         video = make_static_talking_video(avatar_path, audio, job / "base.mp4")
