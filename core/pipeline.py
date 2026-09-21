@@ -15,37 +15,23 @@ def create_video(topic: str, avatar: str, style: str, seconds: int,
                  voice: str = "", reference_audio: str = ""):
     if not topic.strip():
         raise PipelineError("请输入主题或口播稿")
-
     avatar_path = Path(avatar) if avatar else None
     if not avatar_path or not avatar_path.exists():
         raise PipelineError("请上传头像图片")
+    if use_musetalk and not settings.musetalk_enabled:
+        raise PipelineError("当前是 CPU-only 模式，MuseTalk 已关闭。请取消“使用 MuseTalk 1.5”，先生成静态口播视频。")
 
     job = settings.output_dir / uuid.uuid4().hex
     job.mkdir(parents=True, exist_ok=True)
-
-    if len(topic.strip()) > 120:
-        script = topic.strip()
-    else:
-        script = generate_script(topic.strip(), style, seconds)
-
+    script = topic.strip() if len(topic.strip()) > 120 else generate_script(topic.strip(), style, seconds)
     (job / "script.txt").write_text(script, encoding="utf-8")
-
-    # 原生CosyVoice3的提示音由环境变量配置；API模式使用voice字段。
-    audio = synthesize(
-        script,
-        job / "speech.wav",
-        voice=voice.strip() or None,
-        speed=speed,
-    )
+    audio = synthesize(script, job / "speech.wav", voice=voice.strip() or None, speed=speed)
 
     if use_musetalk:
         try:
             video = run_musetalk(avatar_path, audio, job / "talking.mp4")
         except LipSyncError as exc:
-            raise PipelineError(
-                f"MuseTalk模式失败：{exc}\n\n"
-                "请先运行 python app.py 的“系统检查”，确认MuseTalk模型和Whisper目录已配置。"
-            ) from exc
+            raise PipelineError(f"MuseTalk模式失败：{exc}") from exc
     else:
         video = make_static_talking_video(avatar_path, audio, job / "base.mp4")
 
@@ -54,5 +40,4 @@ def create_video(topic: str, avatar: str, style: str, seconds: int,
         final = add_subtitles(video, srt, job / "final.mp4")
     else:
         final = video
-
     return str(final), script, str(audio)
