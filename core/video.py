@@ -5,13 +5,14 @@ from .config import settings
 class VideoError(RuntimeError):
     pass
 
-def _run(args):
+def _run(args, cwd=None):
     try:
-        p = subprocess.run(args, capture_output=True, text=True)
+        p = subprocess.run(args, cwd=cwd, capture_output=True, text=True)
     except FileNotFoundError as exc:
         raise VideoError(f"找不到FFmpeg：{settings.ffmpeg_bin}") from exc
     if p.returncode != 0:
-        raise VideoError(p.stderr[-3000:] or "FFmpeg执行失败")
+        raise VideoError(p.stderr[-5000:] or "FFmpeg执行失败")
+    return p
 
 def make_static_talking_video(avatar: Path, audio: Path, output: Path):
     args = [
@@ -28,11 +29,30 @@ def make_static_talking_video(avatar: Path, audio: Path, output: Path):
     return output
 
 def add_subtitles(video: Path, subtitle: Path, output: Path):
-    subtitle_filter = subtitle.as_posix().replace(":", "\\:")
+    subtitle_filter = subtitle.resolve().as_posix().replace(":", "\:")
     args = [
         settings.ffmpeg_bin, "-y", "-i", str(video),
-        "-vf", f"subtitles={subtitle_filter}",
+        "-vf", f"subtitles='{subtitle_filter}'",
         "-c:a", "copy", str(output)
     ]
     _run(args)
     return output
+
+def probe(path: Path) -> dict:
+    args = [
+        settings.ffmpeg_bin, "-v", "error", "-show_entries",
+        "format=duration:stream=codec_name,width,height",
+        "-of", "default=noprint_wrappers=1", str(path)
+    ]
+    try:
+        p = subprocess.run(args, capture_output=True, text=True)
+    except FileNotFoundError:
+        return {}
+    if p.returncode != 0:
+        return {}
+    result = {}
+    for line in p.stdout.splitlines():
+        if "=" in line:
+            k, v = line.split("=", 1)
+            result[k] = v
+    return result
