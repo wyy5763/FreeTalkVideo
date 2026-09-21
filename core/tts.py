@@ -1,6 +1,8 @@
 from pathlib import Path
 import base64
-import sys
+import json
+import subprocess
+import tempfile
 import requests
 from .config import settings
 
@@ -42,46 +44,49 @@ def _api_synthesize(text: str, output: Path, voice: str | None, speed: float) ->
 
 def _native_synthesize(text: str, output: Path, speed: float) -> Path:
     root = Path(settings.cosyvoice_root)
-    model_dir = settings.cosyvoice_model_dir
-    prompt_wav = settings.cosyvoice_prompt_wav
-    prompt_text = settings.cosyvoice_prompt_text
-
     if not root.exists():
         raise TTSError("TTS_MODE=native 时必须配置 COSYVOICE_ROOT")
-    if not model_dir:
+    if not settings.cosyvoice_model_dir:
         raise TTSError("TTS_MODE=native 时必须配置 COSYVOICE_MODEL_DIR")
-    if not prompt_wav or not Path(prompt_wav).exists():
+    if not settings.cosyvoice_prompt_wav or not Path(settings.cosyvoice_prompt_wav).exists():
         raise TTSError("CosyVoice3 原生零样本模式需要 COSYVOICE_PROMPT_WAV")
-    if not prompt_text:
+    if not settings.cosyvoice_prompt_text:
         raise TTSError("CosyVoice3 原生零样本模式需要 COSYVOICE_PROMPT_TEXT")
 
+    request = {
+        "cosyvoice_root": str(root.resolve()),
+        "model_dir": settings.cosyvoice_model_dir,
+        "prompt_wav": settings.cosyvoice_prompt_wav,
+        "prompt_text": settings.cosyvoice_prompt_text,
+        "text": text,
+        "speed": speed,
+        "output": str(output.resolve()),
+        "fp16": settings.cosyvoice_fp16,
+    }
     try:
-        root_str = str(root.resolve())
-        if root_str not in sys.path:
-            sys.path.insert(0, root_str)
-        import torch
-        import torchaudio
-        from cosyvoice.cli.cosyvoice import AutoModel
-
-        model = AutoModel(model_dir=model_dir, fp16=settings.cosyvoice_fp16)
-        chunks = []
-        for item in model.inference_zero_shot(
-            text,
-            prompt_text,
-            prompt_wav,
-            stream=False,
-            speed=speed,
-        ):
-            chunks.append(item["tts_speech"])
-        if not chunks:
-            raise TTSError("CosyVoice3 没有返回音频")
-        audio = torch.cat(chunks, dim=1)
-        torchaudio.save(str(output), audio.cpu(), model.sample_rate)
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as f:
+            json.dump(request, f, ensure_ascii=False)
+            request_file = f.name
+        p = subprocess.run(
+            [settings.cosyvoice_python, "-m", "core.cosyvoice_worker", request_file],
+            capture_output=True,
+            text=True,
+            timeout=900,
+        )
+        if p.returncode != 0:
+            raise TTSError((p.stderr or p.stdout)[-8000:] or "CosyVoice native worker失败")
+        if not output.exists():
+            raise TTSError("CosyVoice native worker完成但没有生成WAV")
         return output
     except TTSError:
         raise
     except Exception as exc:
-        raise TTSError(f"CosyVoice3 原生推理失败：{exc}") from exc
+        raise TTSError(f"CosyVoice3 native worker失败：{exc}") from exc
+    finally:
+        try:
+            Path(locals().get("request_file", "")).unlink(missing_ok=True)
+        except Exception:
+            pass
 
 def synthesize(text: str, output: Path, voice: str | None = None, speed: float = 1.0) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
